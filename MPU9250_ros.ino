@@ -8,7 +8,12 @@
  * Modified from MPU9250_Basic from SparkFun_MPU9250_DMP_Arduino_Library
  * and Motion Tracking Glove for Human-Machine Interaction article
  *
+ * Maintained by Conor Messer
+ * Last modified: 4/5/18
+ *
  */
+
+ #include <Arduino.h>
 
  #include <ros/ros.h>
  #include <sensor_msgs/Imu.h>
@@ -18,8 +23,10 @@
  #include <SparkFunMPU9250-DMP.h>
  #include <Quaternion.hpp>
 
+ // initialize imu object from SparkFun_MPU9250_DMP_Arduino_Library
  MPU9250_DMP imu;
 
+ // ROS initializations for publisher node
  ros::NodeHandle nh;
  ros::Publisher pub_imu = node_handle.advertise<sensor_msgs::Imu>("imu",1000);
  sensor_msgs::Imu msg;
@@ -40,19 +47,18 @@
 
  float angle, x_pos, y_pos, z_pos;
 
- // to space out how often data prints
+ // to space out how often data prints and publishes
  int count = 0;
 
  void setup()
 {
-  Serial.begin(115200);
+  Serial.begin(115200);  // TODO do I still need serial is this is publisher node?
 
   nh.initNode(); // initialize this as a node
-  nh.advertise(pub_imu);
+  nh.advertise(pub_imu); // advertise this as a publisher node
 
   // initialize globals
   initializeData();
-
 
   // Call imu.begin() to verify communication with and
   // initialize the MPU-9250 to it's default values.
@@ -102,7 +108,6 @@
 
   // Enable gyro calibration - *** this needs FIFO to work?
   // imu.dmpBegin(DMP_FEATURE_GYRO_CAL | DMP_FEATURE_SEND_CAL_GYRO, 10);
-
 
   // calibrate gyro, using average values taken over 8 seconds.
   calibrateGyro();
@@ -160,33 +165,37 @@ void loop()
 
         // Get quaternions for the orientation from the Euler angles (in degrees)
         // and for the acceleration vector
-          Quaternion acc_quat_final_rot = Quaternion::changeFrame(x_acceleration[1],y_acceleration[1],z_acceleration[1],z_angle[1],x_angle[1],y_angle[1]);
+        Quaternion acc_quat_final_rot = Quaternion::changeFrame(x_acceleration[1],y_acceleration[1],z_acceleration[1],z_angle[1],x_angle[1],y_angle[1]);
 
         // remove gravity from acc (subtract 1 g from the z-dir in Earth frame)
         acc_quat_no_grav = Quaternion::removeGravity(acc_quat_final_rot);
 
-        // ------------------------------------------
-
+        // allows for data to be printed/published at lower frequency TODO
         if (count % 1 == 0) {
           printIMUData();
           prepareDataPublishing();
           pub_imu.publish(&msg);
         }
 
-      // shift the data to accomodate for next data set
-      shiftData();
+        // shift the data to accomodate for next data set
+        shiftData();
       }
 
       nh.spin(); //TODO right placement?
 
     }
 
+/* Prints the current data in each array to the serial stream.
+ * Prints the orientation, raw angular velocity, acceleration transformed into
+ * the world frame with gravity removed, and raw acceleration.
+ */
 void printIMUData(void)
 {
-
   // Use the calcAccel, calcGyro, and calcMag functions to
   // convert the raw sensor readings (signed 16-bit values)
   // to their respective units.
+
+
   float accelX = Quaternion::getX(acc_quat_no_grav);
   float accelY = Quaternion::getY(acc_quat_no_grav);
   float accelZ = Quaternion::getZ(acc_quat_no_grav);
@@ -205,6 +214,8 @@ void printIMUData(void)
   Serial.println();
 }
 
+/* Places the data in the sensor_msgs data structure to prepare for publishing.
+ */
 void prepareDataPublishing(void)
 {
   geometry_msgs::Quaternion orient;
