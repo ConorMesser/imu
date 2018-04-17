@@ -1,3 +1,4 @@
+
 /********************************************
  * MPU9250_Full
  *
@@ -15,7 +16,7 @@
 
  #include <Arduino.h>
 
- #include <ros/ros.h>
+ #include <ros.h>
  #include <sensor_msgs/Imu.h>
  #include <geometry_msgs/Quaternion.h>
  #include <geometry_msgs/Vector3.h>
@@ -28,8 +29,9 @@
 
  // ROS initializations for publisher node
  ros::NodeHandle nh;
- ros::Publisher pub_imu = node_handle.advertise<sensor_msgs::Imu>("imu",1000);
  sensor_msgs::Imu msg;
+ ros::Publisher pub_imu("imu",&msg);
+
 
  // Global variables
  double x_angular_rate[2], y_angular_rate[2], z_angular_rate[2];
@@ -37,6 +39,7 @@
  double x_acceleration[2], y_acceleration[2], z_acceleration[2];
  double x_velocity[2], y_velocity[2], z_velocity[2];
  double x_position[2], y_position[2], z_position[2];
+ double GRAV = 9.80665;
 
  Quaternion acc_quat_no_grav = Quaternion(0,0,0,0);
 
@@ -52,7 +55,7 @@
 
  void setup()
 {
-  Serial.begin(115200);  // TODO do I still need serial is this is publisher node?
+  Serial.begin(57600);  // TODO do I still need serial is this is publisher node?
 
   nh.initNode(); // initialize this as a node
   nh.advertise(pub_imu); // advertise this as a publisher node
@@ -95,7 +98,7 @@
   // of the accelerometer and gyroscope.
   // Can be any of the following: 188, 98, 42, 20, 10, 5
   // (values are in Hz).
-  imu.setLPF(20);
+  imu.setLPF(42);
 
   // The sample rate of the accel/gyro can be set using
   // setSampleRate. Acceptable values range from 4Hz to 1kHz
@@ -181,7 +184,7 @@ void loop()
         shiftData();
       }
 
-      nh.spin(); //TODO right placement?
+    nh.spinOnce();
 
     }
 
@@ -194,7 +197,6 @@ void printIMUData(void)
   // Use the calcAccel, calcGyro, and calcMag functions to
   // convert the raw sensor readings (signed 16-bit values)
   // to their respective units.
-
 
   float accelX = Quaternion::getX(acc_quat_no_grav);
   float accelY = Quaternion::getY(acc_quat_no_grav);
@@ -209,7 +211,7 @@ void printIMUData(void)
   Serial.println("Orientation: " + String(gyroX) + " " + String(gyroY) + " " + String(gyroZ) + " degrees");
   Serial.println("GYRO: " + String(x_angular_rate[1]) + "," + String(y_angular_rate[1]) + "," + String(z_angular_rate[1]));
   Serial.println("Accel: " + String(accelX) + ", " + String(accelY) + ", " + String(accelZ) + " g");
-  Serial.println("ACCEL: " + String(imu.calcAccel(imu.ax)) + "," + String(imu.calcAccel(imu.ay)) + "," + String(imu.calcAccel(imu.az)));
+  Serial.println("ACCEL: x: " + String(imu.calcAccel(imu.ax) * -1) + ", y: " + String(imu.calcAccel(imu.ay) * -1) + ", z: " + String(imu.calcAccel(imu.az) * -1));
   Serial.println("Time: " + String(imu.time) + " ms");
   Serial.println();
 }
@@ -222,38 +224,33 @@ void prepareDataPublishing(void)
   geometry_msgs::Vector3 ang_velo;
   geometry_msgs::Vector3 accel;
 
-  double orient_covar [9];
-  double angVelo_covar [9];
-  double accel_covar [9];
-
-  Quaternion orient_quat = Quaternion(z_angle[1],x_angle[1],y_angle[1]); // check function
+  Quaternion orient_quat = Quaternion::FromEuler(x_angle[1]*PI/180,y_angle[1]*PI/180,z_angle[1]*PI/180); // check function
   orient.x = Quaternion::getX(orient_quat);
   orient.y = Quaternion::getY(orient_quat);
   orient.z = Quaternion::getZ(orient_quat);
   orient.w = Quaternion::getW(orient_quat);
 
   // Angular velocity components
-  ang_velo.x = x_angular_rate[1];
-  ang_velo.y = y_angular_rate[1];
-  ang_velo.z = z_angular_rate[1];
+  ang_velo.x = x_angular_rate[1] * PI / 180;
+  ang_velo.y = y_angular_rate[1] * PI / 180;
+  ang_velo.z = z_angular_rate[1] * PI / 180;
 
   // Acceleration components (this is in global frame, gravity removed)
-  accel.x = Quaternion::getX(acc_quat_no_grav);
-  accel.y = Quaternion::getY(acc_quat_no_grav);
-  accel.z = Quaternion::getZ(acc_quat_no_grav);
+  // Acceleration given in m/^2
+  accel.x = Quaternion::getX(acc_quat_no_grav) * GRAV;
+  accel.y = Quaternion::getY(acc_quat_no_grav) * GRAV;
+  accel.z = Quaternion::getZ(acc_quat_no_grav) * GRAV;
 
-  // covariances for each data group TODO
-  orient_covar = {};
-  angVelo_covar = {};
-  accel_covar = {};
-
+  msg.header.stamp = nh.now();
+  msg.header.frame_id = "/my_frame";
   msg.orientation = orient;
-  msg.orientation_covariance = orient_covar;
+  //msg.orientation_covariance[0] = 0;
   msg.angular_velocity = ang_velo;
-  msg.angular_velocity_covariance = angVelo_covar;
+  //msg.angular_velocity_covariance = {0,0,0,0,0,0,0,0,0};
   msg.linear_acceleration = accel;
-  msg.linear_acceleration_covariance = accel_covar;
+  //msg.linear_acceleration_covariance = {0,0,0,0,0,0,0,0,0};
 }
+
 
 // calibrate the gyroscope at the beginning of sampling, taking an average
 // of the angular velocities over an 8 sec period.
@@ -369,12 +366,14 @@ void readGyroData(void) {
 }
 
 // put data from digital input into arrays, current accelerations.
-// The orientations of the axes follow the right hand rule and is labeled
-// on the sensor.
+// The orientations of the axes follow the left hand rule with +x to the left,
+// +y to the back, and +z pointing down. All values are multiplied by -1
+// to give right hand rule orientation of axes corresponding to the diagram
+// on the sensor (and in the documentation).
 void readAccelData(void) {
-  x_acceleration[1] = imu.calcAccel(imu.ax);
-  y_acceleration[1] = imu.calcAccel(imu.ay);
-  z_acceleration[1] = imu.calcAccel(imu.az);
+  x_acceleration[1] = imu.calcAccel(imu.ax) * -1;
+  y_acceleration[1] = imu.calcAccel(imu.ay) * -1;
+  z_acceleration[1] = imu.calcAccel(imu.az) * -1;
 }
 
 // shift the current data into the old positions in each vector
