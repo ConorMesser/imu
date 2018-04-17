@@ -20,6 +20,7 @@
  #include <sensor_msgs/Imu.h>
  #include <geometry_msgs/Quaternion.h>
  #include <geometry_msgs/Vector3.h>
+ #include <sensor_msgs/MagneticField.h>
 
  #include <SparkFunMPU9250-DMP.h>
  #include <Quaternion.hpp>
@@ -30,7 +31,11 @@
  // ROS initializations for publisher node
  ros::NodeHandle nh;
  sensor_msgs::Imu msg;
- ros::Publisher pub_imu("imu",&msg);
+ ros::Publisher pub_imu("/imu/data_raw",&msg);
+
+ // ROS magnetometer publisher
+ sensor_msgs::MagneticField mag_msg;
+ ros::Publisher pub_mag("/imu/mag",&mag_msg);
 
 
  // Global variables
@@ -59,6 +64,8 @@
 
   nh.initNode(); // initialize this as a node
   nh.advertise(pub_imu); // advertise this as a publisher node
+  nh.advertise(pub_mag);
+
 
   // initialize globals
   initializeData();
@@ -178,6 +185,7 @@ void loop()
           printIMUData();
           prepareDataPublishing();
           pub_imu.publish(&msg);
+          pub_mag.publish(&mag_msg);
         }
 
         // shift the data to accomodate for next data set
@@ -212,6 +220,7 @@ void printIMUData(void)
   Serial.println("GYRO: " + String(x_angular_rate[1]) + "," + String(y_angular_rate[1]) + "," + String(z_angular_rate[1]));
   Serial.println("Accel: " + String(accelX) + ", " + String(accelY) + ", " + String(accelZ) + " g");
   Serial.println("ACCEL: x: " + String(imu.calcAccel(imu.ax) * -1) + ", y: " + String(imu.calcAccel(imu.ay) * -1) + ", z: " + String(imu.calcAccel(imu.az) * -1));
+  Serial.println("Mag: x: " + String(magX) + ", y: " + String(magY) + ", z: " + String(magZ));
   Serial.println("Time: " + String(imu.time) + " ms");
   Serial.println();
 }
@@ -249,6 +258,18 @@ void prepareDataPublishing(void)
   //msg.angular_velocity_covariance = {0,0,0,0,0,0,0,0,0};
   msg.linear_acceleration = accel;
   //msg.linear_acceleration_covariance = {0,0,0,0,0,0,0,0,0};
+
+
+  geometry_msgs::Vector3 mag;
+
+  mag.x = imu.calcMag(imu.mx);
+  mag.y = imu.calcMag(imu.my);
+  mag.z = imu.calcMag(imu.mz);
+
+  mag_msg.header.stamp = nh.now();
+  mag_msg.header.frame_id = "/my_frame";
+  mag_msg.magnetic_field = mag;
+
 }
 
 
