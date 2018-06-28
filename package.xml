@@ -6,11 +6,17 @@
 
   <maintainer email="messer.co@husky.neu.edu">conor-messer</maintainer>
 
-
     <license>Northeastern University</license>
 
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>sensor_msgs</build_depend>
-  <run_depend>sensor_msgs</run_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>roscpp</build_depend>
+  <build_depend>Quaternion.cpp</build_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>roscpp</exec_depend>
+  <exec_depend>Quaternion.cpp</exec_depend>
+
 
 </package>
